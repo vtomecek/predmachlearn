@@ -1,0 +1,149 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Vladimir Tomecek"
+date: "05/24/2015"
+output: html_document
+---
+
+# Summary
+
+In this project we'll analyze data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants
+in order to predict the way they performed barbell lifts (5 different ways).
+
+First we'll clean the data (remove the NAs), then we'll use the randomForest to predict 
+the way the barbell lifts were performed.
+
+Finally we'll measure our model's performance on CV. We'll get 99.5% accurancy, which is pretty good.
+
+
+# Data
+
+Our data come from this source: http://groupware.les.inf.puc-rio.br/har.
+It contains data from 19622 exercises (5 different types) performed by 6 participants and it captures the data from accelerometers on the belt, forearm, arm, and dumbell.
+
+Datasets used in this project can be downloaded from here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+# Data Loading and Cleaning
+
+Let's have a look on our data.
+```{r}
+train = read.csv("pml-training.csv")
+# this goes to appendix
+summary1 = summary(train)
+```
+
+We see, that there are columns with lot of NAs, other columns contains '#DIV/0!' or a lot of ''. We don't want to use these variables as predictors.
+
+So let's load the date again.
+```{r}
+train = read.csv("pml-training.csv", na.strings = c("NA","#DIV/0!"))
+test = read.csv("pml-testing.csv", na.strings = c("NA","#DIV/0!"))
+```
+
+Now we count number of NAs for each column.
+```{r}
+cols = colSums(is.na(train))
+# this goes to appendix
+cols1 = cols
+```
+
+It looks like we can throw away all columns with >0 NAs. We have 60 columns with no NA which is great because we don't have to do the imputing.
+```{r}
+cols = cols[cols==0]
+```
+
+Now we can construct the formula, that we'll use for the prediction.
+
+We don't include exerciseid, timestamp, and username in our model because such a model won't be much useful.
+
+```{r}
+# get rownames
+colnames = rownames(as.data.frame(cols))
+# remove classe(outcome), X(id) and timestamp/username info from predictors list
+colnames = colnames[!colnames %in% c("classe", "X", "user_name", "new_window", "num_window",
+                                     "cvtd_timestamp", "raw_timestamp_part_1", "raw_timestamp_part_2"
+                                     )]
+# now construct the formula `classe ~ all colnames`
+formula = formula(paste("classe ~ ", paste(colnames, collapse=" + ")))
+```
+
+
+# Model Fitting and Evaluating
+
+We split our training set into real training set and cross-validation set, so we can measure our model's performance.
+
+```{r message=FALSE}
+library(caret)
+trainIndex = createDataPartition(train$classe, p=0.70, list=FALSE)
+cv = train[-trainIndex,]
+train = train[trainIndex,]
+```
+
+Now we can train our model on the training set.
+
+We'll use randomForest, because we didn't do any EDA and we know practically nothing about the data.
+Using other models like glm would require to specify the interactions and types of dependency (linear, quadratic, exponential...), which we don't know. RandomForest can discover such dependencies automatically for us and we don't have to specify them.
+
+```{r message=FALSE}
+library(randomForest)
+model = randomForest(formula, data=train)
+```
+
+Now we can evaluate our model's performance on CV.
+
+```{r}
+# compare correct classe vs predicted one on CV
+tab = table(cv$classe, predict(model, cv))
+tab
+
+# calculate the accuracy
+sum(as.matrix(tab) * diag(5)) / nrow(cv)
+```
+
+We get 99.5% accuracy which means we misclassified only ~0.5% cases.
+
+We should expect same performance on the test set, since we evaluated only one model.
+
+If we have tested many models and we have chosen the one that performed best on CV, we should have expected
+slightly worse performance on the CV.
+
+If the test set have contained data from participants not included in train set, we should again expect slightly worse performance.
+
+Finally we can show the importance of individual predictors.
+
+```{r}
+# this goes to appendix
+vi1 = varImp(model)
+```
+
+# Conclusion
+
+We showed that data from accelerometers can predict the type of performed exercise pretty well, with accurancy of 99.5%. Data from the belt have highest importance, while data from the gyroses have lowest importance.
+
+
+# References
+[1] http://groupware.les.inf.puc-rio.br/har
+
+# Appendix
+
+```{r fig.cap="Figure 1 - Summary of the raw training set"}
+summary1
+```
+
+```{r fig.cap="Figure 2 - Number of NAs for each column in the training set"}
+cols1
+```
+
+```{r fig.cap="Figure 3 - Formula we used in our model"}
+formula
+```
+
+```{r fig.cap="Figure 4 - Importance of individual variables"}
+vi1
+```
+
